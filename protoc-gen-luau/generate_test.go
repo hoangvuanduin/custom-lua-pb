@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -70,6 +71,45 @@ func TestGenerate(t *testing.T) {
 		}
 		if got != want {
 			t.Errorf("file %q:\ngot:\n%s\nwant:\n%s", name, got, want)
+		}
+	}
+}
+
+func TestGenerateGolden(t *testing.T) {
+	data, err := os.ReadFile("testdata/request.pb")
+	if err != nil {
+		t.Fatalf("reading request.pb: %v", err)
+	}
+
+	req := &pluginpb.CodeGeneratorRequest{}
+	if err := proto.Unmarshal(data, req); err != nil {
+		t.Fatalf("unmarshaling request: %v", err)
+	}
+
+	plugin, err := protogen.Options{}.New(req)
+	if err != nil {
+		t.Fatalf("protogen.New: %v", err)
+	}
+
+	if err := generate(plugin); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	resp := plugin.Response()
+	if resp.GetError() != "" {
+		t.Fatalf("plugin error: %s", resp.GetError())
+	}
+
+	for _, f := range resp.File {
+		goldenPath := "testdata/golden/" + f.GetName()
+		want, err := os.ReadFile(goldenPath)
+		if err != nil {
+			t.Errorf("reading golden %s: %v", goldenPath, err)
+			continue
+		}
+		if f.GetContent() != string(want) {
+			t.Errorf("file %s differs from golden:\ngot:\n%s\nwant:\n%s",
+				f.GetName(), f.GetContent(), string(want))
 		}
 	}
 }
