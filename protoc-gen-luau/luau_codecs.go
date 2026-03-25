@@ -114,35 +114,55 @@ func emitOptionalHelpers(g *protogen.GeneratedFile, pairs []compoundPair) {
 	}
 }
 
-func optionalHelperName(field *protogen.Field) string {
+// optionalHelperSuffix returns the suffix used in optional helper function names.
+// For data_types: TrimSuffix(GoName, "Type") + "Field" → "StringField"
+// For table files: GoName → "StringType"
+type optionalHelperNamer func(field *protogen.Field) string
+
+func dataTypesHelperName(field *protogen.Field) string {
 	if field.Desc.Kind() != protoreflect.MessageKind {
 		return ""
 	}
-	return strings.TrimSuffix(field.Message.GoIdent.GoName, "Type")
+	return strings.TrimSuffix(field.Message.GoIdent.GoName, "Type") + "Field"
+}
+
+func tableFileHelperName(field *protogen.Field) string {
+	if field.Desc.Kind() != protoreflect.MessageKind {
+		return ""
+	}
+	return field.Message.GoIdent.GoName
 }
 
 func emitCompoundSubFieldsEncode(g *protogen.GeneratedFile, msg *protogen.Message, moduleName string) {
+	emitCompoundSubFieldsEncodeWith(g, msg, moduleName, dataTypesHelperName)
+}
+
+func emitCompoundSubFieldsDecode(g *protogen.GeneratedFile, msg *protogen.Message, moduleName string) {
+	emitCompoundSubFieldsDecodeWith(g, msg, moduleName, dataTypesHelperName)
+}
+
+func emitCompoundSubFieldsEncodeWith(g *protogen.GeneratedFile, msg *protogen.Message, moduleName string, namer optionalHelperNamer) {
 	name := msg.GoIdent.GoName
 	g.P("function ", moduleName, ".encodeJson", name, "(sf: ", name, "): {[string]: any}")
 	g.P("\tlocal result: {[string]: any} = {}")
 	for _, field := range msg.Fields {
 		luauName := snakeToCamel(string(field.Desc.Name()))
-		helper := optionalHelperName(field)
-		g.P("\tresult.", luauName, " = encodeOptional", helper, "Field(sf.", luauName, ")")
+		helper := namer(field)
+		g.P("\tresult.", luauName, " = encodeOptional", helper, "(sf.", luauName, ")")
 	}
 	g.P("\treturn result")
 	g.P("end")
 	g.P()
 }
 
-func emitCompoundSubFieldsDecode(g *protogen.GeneratedFile, msg *protogen.Message, moduleName string) {
+func emitCompoundSubFieldsDecodeWith(g *protogen.GeneratedFile, msg *protogen.Message, moduleName string, namer optionalHelperNamer) {
 	name := msg.GoIdent.GoName
 	g.P("function ", moduleName, ".decodeJson", name, "(json: {[string]: any}): ", name)
 	g.P("\treturn {")
 	for _, field := range msg.Fields {
 		luauName := snakeToCamel(string(field.Desc.Name()))
-		helper := optionalHelperName(field)
-		g.P("\t\t", luauName, " = decodeOptional", helper, "Field(json.", luauName, "),")
+		helper := namer(field)
+		g.P("\t\t", luauName, " = decodeOptional", helper, "(json.", luauName, "),")
 	}
 	g.P("\t}")
 	g.P("end")

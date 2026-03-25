@@ -57,6 +57,12 @@ func classifyMessages(file *protogen.File) *classifiedMessages {
 			continue
 		}
 
+		if strings.HasSuffix(name, "Fields") {
+			prefix := strings.TrimSuffix(name, "Fields")
+			subFieldsMap[prefix] = msg
+			continue
+		}
+
 		hasValueSubFields := false
 		for _, f := range msg.Fields {
 			if string(f.Desc.Name()) == "value_sub_fields" {

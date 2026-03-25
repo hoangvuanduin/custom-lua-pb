@@ -25,6 +25,11 @@ func generate(plugin *protogen.Plugin) error {
 			continue
 		}
 
+		if baseName == "source_table" || baseName == "target_table" {
+			generateTableFile(plugin, f)
+			continue
+		}
+
 		luauName := baseName + ".luau"
 		g := plugin.NewGeneratedFile(luauName, "")
 		g.P("--!strict")
