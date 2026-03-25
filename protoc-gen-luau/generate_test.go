@@ -100,6 +100,10 @@ func TestGenerateGolden(t *testing.T) {
 		t.Fatalf("plugin error: %s", resp.GetError())
 	}
 
+	if got, want := len(resp.File), 4; got != want {
+		t.Errorf("got %d output files, want %d", got, want)
+	}
+
 	for _, f := range resp.File {
 		goldenPath := "testdata/golden/" + f.GetName()
 		want, err := os.ReadFile(goldenPath)

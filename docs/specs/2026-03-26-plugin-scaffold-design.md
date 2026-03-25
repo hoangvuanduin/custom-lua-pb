@@ -90,11 +90,13 @@ go build -o protoc-gen-luau .
 
 protoc \
   --plugin=protoc-gen-luau="$SCRIPT_DIR/protoc-gen-luau" \
-  --luau_out="$OUTPUT_DIR" \
+  "--luau_out=Mdata_types.proto=placeholder/data_types,Mtable_schema.proto=placeholder/table_schema,Mtables/source_table.proto=placeholder/tables/source_table,Mtables/target_table.proto=placeholder/tables/target_table:$OUTPUT_DIR" \
   -I "$PROTO_DIR" \
   data_types.proto table_schema.proto \
   tables/source_table.proto tables/target_table.proto
 ```
+
+Note: The `M` parameters provide placeholder Go import paths required by the `protogen` framework, which validates Go import paths for all proto files even when generating non-Go output. These values are not used by the Luau code generator.
 
 ### generate_test.go
 
