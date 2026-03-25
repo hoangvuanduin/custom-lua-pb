@@ -87,10 +87,16 @@ func classifyMessages(file *protogen.File) *classifiedMessages {
 func generateDataTypes(plugin *protogen.Plugin, file *protogen.File) {
 	g := plugin.NewGeneratedFile("data_types.luau", "")
 	cm := classifyMessages(file)
-	_ = cm
+	_ = cm // compound pairs used later
 
 	g.P("--!strict")
 	g.P("local DataTypes = {}")
 	g.P()
+
+	// Simple types
+	emitSimpleTypeDefs(g, cm.simpleTypes)
+	emitSimpleConstructors(g, cm.simpleTypes)
+	emitSimpleCodecs(g, cm.simpleTypes)
+
 	g.P("return DataTypes")
 }

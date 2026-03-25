@@ -40,6 +40,46 @@ func generateDataTypesOutput(t *testing.T) string {
 	return ""
 }
 
+func TestDataTypesSimpleTypes(t *testing.T) {
+	output := generateDataTypesOutput(t)
+
+	// Type definitions
+	for _, name := range []string{"StringType", "NumberType", "BooleanType", "EnumType", "MultipleCheckboxType", "RadioGroupType"} {
+		if !strings.Contains(output, "export type "+name+" = {") {
+			t.Errorf("missing type definition for %s", name)
+		}
+	}
+
+	// Constructors
+	for _, name := range []string{"makeStringType", "makeNumberType", "makeBooleanType", "makeEnumType", "makeMultipleCheckboxType", "makeRadioGroupType"} {
+		if !strings.Contains(output, "function DataTypes."+name+"(") {
+			t.Errorf("missing constructor %s", name)
+		}
+	}
+
+	// Encode/decode
+	for _, name := range []string{"encodeJsonStringType", "decodeJsonStringType", "encodeJsonNumberType", "decodeJsonNumberType", "encodeJsonBooleanType", "decodeJsonBooleanType", "encodeJsonEnumType", "decodeJsonEnumType", "encodeJsonMultipleCheckboxType", "decodeJsonMultipleCheckboxType", "encodeJsonRadioGroupType", "decodeJsonRadioGroupType"} {
+		if !strings.Contains(output, "function DataTypes."+name+"(") {
+			t.Errorf("missing codec function %s", name)
+		}
+	}
+
+	// Spot-check: StringType has optional regex field
+	if !strings.Contains(output, "regex: string?,") {
+		t.Error("StringType.regex should be optional")
+	}
+
+	// Spot-check: NumberType has optional minValue/maxValue
+	if !strings.Contains(output, "minValue: number?,") {
+		t.Error("NumberType.minValue should be optional")
+	}
+
+	// Spot-check: BooleanType constructor uses special boolean default
+	if !strings.Contains(output, "if c.value ~= nil then c.value else false") {
+		t.Error("BooleanType constructor should use special boolean handling")
+	}
+}
+
 func TestDataTypesHeader(t *testing.T) {
 	output := generateDataTypesOutput(t)
 	if !strings.HasPrefix(output, "--!strict\n") {
