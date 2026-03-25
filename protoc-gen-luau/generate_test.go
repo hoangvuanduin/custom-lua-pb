@@ -93,8 +93,20 @@ func TestGenerateGolden(t *testing.T) {
 		t.Errorf("got %d output files, want %d", got, want)
 	}
 
+	updateGolden := os.Getenv("UPDATE_GOLDEN") == "1"
+
 	for _, f := range resp.File {
 		goldenPath := "testdata/golden/" + f.GetName()
+		if updateGolden {
+			if err := os.MkdirAll("testdata/golden", 0755); err != nil {
+				t.Fatalf("mkdir golden: %v", err)
+			}
+			if err := os.WriteFile(goldenPath, []byte(f.GetContent()), 0644); err != nil {
+				t.Fatalf("writing golden %s: %v", goldenPath, err)
+			}
+			t.Logf("updated golden: %s", goldenPath)
+			continue
+		}
 		want, err := os.ReadFile(goldenPath)
 		if err != nil {
 			t.Errorf("reading golden %s: %v", goldenPath, err)

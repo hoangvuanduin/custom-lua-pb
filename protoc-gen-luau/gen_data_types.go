@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -80,6 +81,9 @@ func classifyMessages(file *protogen.File) *classifiedMessages {
 			})
 		}
 	}
+	sort.Slice(cm.compoundPairs, func(i, j int) bool {
+		return cm.compoundPairs[i].wrapper.GoIdent.GoName < cm.compoundPairs[j].wrapper.GoIdent.GoName
+	})
 
 	return cm
 }
