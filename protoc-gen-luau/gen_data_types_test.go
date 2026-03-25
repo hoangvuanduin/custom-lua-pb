@@ -122,6 +122,47 @@ func TestDataTypesCompoundTypes(t *testing.T) {
 	}
 }
 
+func TestDataTypesDispatch(t *testing.T) {
+	output := generateDataTypesOutput(t)
+
+	if !strings.Contains(output, "export type CustomCompoundType = {") {
+		t.Error("missing CustomCompoundType definition")
+	}
+	if !strings.Contains(output, "function DataTypes.makeCustomCompoundType(") {
+		t.Error("missing CustomCompoundType constructor")
+	}
+	if !strings.Contains(output, "function DataTypes.encodeJsonCustomCompoundType(") {
+		t.Error("missing CustomCompoundType encode")
+	}
+	if !strings.Contains(output, "function DataTypes.decodeJsonCustomCompoundType(") {
+		t.Error("missing CustomCompoundType decode")
+	}
+
+	if !strings.Contains(output, "local STRING_TYPE_IDS: {[string]: boolean} = {") {
+		t.Error("missing STRING_TYPE_IDS table")
+	}
+	if !strings.Contains(output, "local NUMBER_TYPE_IDS: {[string]: boolean} = {") {
+		t.Error("missing NUMBER_TYPE_IDS table")
+	}
+	if !strings.Contains(output, "local ENUM_TYPE_IDS: {[string]: boolean} = {") {
+		t.Error("missing ENUM_TYPE_IDS table")
+	}
+	if !strings.Contains(output, "local COMPOUND_TYPE_CODECS: {[string]: {decode: string, encode: string}} = {") {
+		t.Error("missing COMPOUND_TYPE_CODECS table")
+	}
+
+	if !strings.Contains(output, "function DataTypes.decodeFieldValueByTypeId(") {
+		t.Error("missing decodeFieldValueByTypeId")
+	}
+	if !strings.Contains(output, "function DataTypes.encodeFieldValueByTypeId(") {
+		t.Error("missing encodeFieldValueByTypeId")
+	}
+
+	if !strings.Contains(output, "Ssn = true") {
+		t.Error("STRING_TYPE_IDS missing Ssn entry")
+	}
+}
+
 func TestDataTypesHeader(t *testing.T) {
 	output := generateDataTypesOutput(t)
 	if !strings.HasPrefix(output, "--!strict\n") {

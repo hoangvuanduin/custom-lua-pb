@@ -92,18 +92,12 @@ func generateDataTypes(plugin *protogen.Plugin, file *protogen.File) {
 	g.P("local DataTypes = {}")
 	g.P()
 
-	// Simple types
 	emitSimpleTypeDefs(g, cm.simpleTypes)
 	emitSimpleConstructors(g, cm.simpleTypes)
 	emitSimpleCodecs(g, cm.simpleTypes)
-
-	// FieldValue duck-typed union
 	emitFieldValueType(g)
-
-	// Optional helpers (only for base types used in SubFields)
 	emitOptionalHelpers(g, cm.compoundPairs)
 
-	// Compound types — each type fully: defs + constructors + codecs
 	for _, pair := range cm.compoundPairs {
 		sfName := pair.subFields.GoIdent.GoName
 		emitCompoundSubFieldsDef(g, pair.subFields)
@@ -116,6 +110,12 @@ func generateDataTypes(plugin *protogen.Plugin, file *protogen.File) {
 		emitCompoundWrapperEncode(g, pair.wrapper, sfName)
 		emitCompoundWrapperDecode(g, pair.wrapper, sfName)
 	}
+
+	emitCustomCompoundDef(g)
+	emitCustomCompoundConstructor(g)
+	emitDispatchTables(g, cm.compoundPairs)
+	emitDispatchFunctions(g)
+	emitCustomCompoundCodecs(g)
 
 	g.P("return DataTypes")
 }
