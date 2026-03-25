@@ -20,6 +20,11 @@ func generate(plugin *protogen.Plugin) error {
 			continue
 		}
 
+		if baseName == "table_schema" {
+			generateTableSchema(plugin, f)
+			continue
+		}
+
 		luauName := baseName + ".luau"
 		g := plugin.NewGeneratedFile(luauName, "")
 		g.P("--!strict")
