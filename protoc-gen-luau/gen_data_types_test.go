@@ -80,6 +80,48 @@ func TestDataTypesSimpleTypes(t *testing.T) {
 	}
 }
 
+func TestDataTypesCompoundTypes(t *testing.T) {
+	output := generateDataTypesOutput(t)
+
+	if !strings.Contains(output, "export type FieldValue = {") {
+		t.Error("missing FieldValue type")
+	}
+
+	for _, helper := range []string{"encodeOptionalStringField", "decodeOptionalStringField", "encodeOptionalNumberField", "decodeOptionalNumberField", "encodeOptionalMultipleCheckboxField", "decodeOptionalMultipleCheckboxField"} {
+		if !strings.Contains(output, "local function "+helper+"(") {
+			t.Errorf("missing optional helper %s", helper)
+		}
+	}
+
+	compounds := []string{"PhoneFax", "DateTime", "Money", "Address", "IndividualName", "Country", "BaseContact", "SubmissionContact", "Signatory", "BankInfo", "BankAccountInfo", "WireInstructions", "BrokerageFirm", "BrokerageAccount", "ServiceContactPoint"}
+	for _, name := range compounds {
+		if !strings.Contains(output, "export type "+name+"SubFields = {") {
+			t.Errorf("missing SubFields def for %s", name)
+		}
+		if !strings.Contains(output, "export type "+name+"Type = {") {
+			t.Errorf("missing Type def for %s", name)
+		}
+		if !strings.Contains(output, "function DataTypes.make"+name+"SubFields(") {
+			t.Errorf("missing SubFields constructor for %s", name)
+		}
+		if !strings.Contains(output, "function DataTypes.make"+name+"Type(") {
+			t.Errorf("missing Type constructor for %s", name)
+		}
+		if !strings.Contains(output, "function DataTypes.encodeJson"+name+"SubFields(") {
+			t.Errorf("missing SubFields encode for %s", name)
+		}
+		if !strings.Contains(output, "function DataTypes.decodeJson"+name+"SubFields(") {
+			t.Errorf("missing SubFields decode for %s", name)
+		}
+		if !strings.Contains(output, "function DataTypes.encodeJson"+name+"Type(") {
+			t.Errorf("missing Type encode for %s", name)
+		}
+		if !strings.Contains(output, "function DataTypes.decodeJson"+name+"Type(") {
+			t.Errorf("missing Type decode for %s", name)
+		}
+	}
+}
+
 func TestDataTypesHeader(t *testing.T) {
 	output := generateDataTypesOutput(t)
 	if !strings.HasPrefix(output, "--!strict\n") {

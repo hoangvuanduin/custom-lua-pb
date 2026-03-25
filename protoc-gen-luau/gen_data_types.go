@@ -87,7 +87,6 @@ func classifyMessages(file *protogen.File) *classifiedMessages {
 func generateDataTypes(plugin *protogen.Plugin, file *protogen.File) {
 	g := plugin.NewGeneratedFile("data_types.luau", "")
 	cm := classifyMessages(file)
-	_ = cm // compound pairs used later
 
 	g.P("--!strict")
 	g.P("local DataTypes = {}")
@@ -97,6 +96,26 @@ func generateDataTypes(plugin *protogen.Plugin, file *protogen.File) {
 	emitSimpleTypeDefs(g, cm.simpleTypes)
 	emitSimpleConstructors(g, cm.simpleTypes)
 	emitSimpleCodecs(g, cm.simpleTypes)
+
+	// FieldValue duck-typed union
+	emitFieldValueType(g)
+
+	// Optional helpers (only for base types used in SubFields)
+	emitOptionalHelpers(g, cm.compoundPairs)
+
+	// Compound types — each type fully: defs + constructors + codecs
+	for _, pair := range cm.compoundPairs {
+		sfName := pair.subFields.GoIdent.GoName
+		emitCompoundSubFieldsDef(g, pair.subFields)
+		emitCompoundWrapperDef(g, pair.wrapper, sfName)
+		g.P()
+		emitCompoundSubFieldsConstructor(g, pair.subFields)
+		emitCompoundWrapperConstructor(g, pair.wrapper, sfName)
+		emitCompoundSubFieldsEncode(g, pair.subFields)
+		emitCompoundSubFieldsDecode(g, pair.subFields)
+		emitCompoundWrapperEncode(g, pair.wrapper, sfName)
+		emitCompoundWrapperDecode(g, pair.wrapper, sfName)
+	}
 
 	g.P("return DataTypes")
 }
