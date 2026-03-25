@@ -121,9 +121,9 @@ func optionalHelperName(field *protogen.Field) string {
 	return strings.TrimSuffix(field.Message.GoIdent.GoName, "Type")
 }
 
-func emitCompoundSubFieldsEncode(g *protogen.GeneratedFile, msg *protogen.Message) {
+func emitCompoundSubFieldsEncode(g *protogen.GeneratedFile, msg *protogen.Message, moduleName string) {
 	name := msg.GoIdent.GoName
-	g.P("function DataTypes.encodeJson", name, "(sf: ", name, "): {[string]: any}")
+	g.P("function ", moduleName, ".encodeJson", name, "(sf: ", name, "): {[string]: any}")
 	g.P("\tlocal result: {[string]: any} = {}")
 	for _, field := range msg.Fields {
 		luauName := snakeToCamel(string(field.Desc.Name()))
@@ -135,9 +135,9 @@ func emitCompoundSubFieldsEncode(g *protogen.GeneratedFile, msg *protogen.Messag
 	g.P()
 }
 
-func emitCompoundSubFieldsDecode(g *protogen.GeneratedFile, msg *protogen.Message) {
+func emitCompoundSubFieldsDecode(g *protogen.GeneratedFile, msg *protogen.Message, moduleName string) {
 	name := msg.GoIdent.GoName
-	g.P("function DataTypes.decodeJson", name, "(json: {[string]: any}): ", name)
+	g.P("function ", moduleName, ".decodeJson", name, "(json: {[string]: any}): ", name)
 	g.P("\treturn {")
 	for _, field := range msg.Fields {
 		luauName := snakeToCamel(string(field.Desc.Name()))
@@ -149,9 +149,9 @@ func emitCompoundSubFieldsDecode(g *protogen.GeneratedFile, msg *protogen.Messag
 	g.P()
 }
 
-func emitCompoundWrapperEncode(g *protogen.GeneratedFile, wrapper *protogen.Message, subFieldsName string) {
+func emitCompoundWrapperEncode(g *protogen.GeneratedFile, wrapper *protogen.Message, subFieldsName string, moduleName string) {
 	name := wrapper.GoIdent.GoName
-	g.P("function DataTypes.encodeJson", name, "(t: ", name, "): {[string]: any}")
+	g.P("function ", moduleName, ".encodeJson", name, "(t: ", name, "): {[string]: any}")
 	g.P("\tlocal result: {[string]: any} = {")
 	g.P("\t\ttypeId = t.typeId,")
 	g.P("\t\tsubFieldKeysInOrder = t.subFieldKeysInOrder,")
@@ -160,19 +160,19 @@ func emitCompoundWrapperEncode(g *protogen.GeneratedFile, wrapper *protogen.Mess
 	g.P("\t\tresult.label = t.label")
 	g.P("\tend")
 	g.P("\tif t.valueSubFields ~= nil then")
-	g.P("\t\tresult.valueSubFields = DataTypes.encodeJson", subFieldsName, "(t.valueSubFields)")
+	g.P("\t\tresult.valueSubFields = ", moduleName, ".encodeJson", subFieldsName, "(t.valueSubFields)")
 	g.P("\tend")
 	g.P("\treturn result")
 	g.P("end")
 	g.P()
 }
 
-func emitCompoundWrapperDecode(g *protogen.GeneratedFile, wrapper *protogen.Message, subFieldsName string) {
+func emitCompoundWrapperDecode(g *protogen.GeneratedFile, wrapper *protogen.Message, subFieldsName string, moduleName string) {
 	name := wrapper.GoIdent.GoName
-	g.P("function DataTypes.decodeJson", name, "(json: {[string]: any}): ", name)
+	g.P("function ", moduleName, ".decodeJson", name, "(json: {[string]: any}): ", name)
 	g.P("\treturn {")
 	g.P(`		typeId = json.typeId or "",`)
-	g.P("\t\tvalueSubFields = if json.valueSubFields then DataTypes.decodeJson", subFieldsName, "(json.valueSubFields) else nil,")
+	g.P("\t\tvalueSubFields = if json.valueSubFields then ", moduleName, ".decodeJson", subFieldsName, "(json.valueSubFields) else nil,")
 	g.P("\t\tsubFieldKeysInOrder = json.subFieldKeysInOrder or {},")
 	g.P("\t\tlabel = json.label,")
 	g.P("\t}")

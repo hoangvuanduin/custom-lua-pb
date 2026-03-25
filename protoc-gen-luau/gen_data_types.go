@@ -104,15 +104,15 @@ func generateDataTypes(plugin *protogen.Plugin, file *protogen.File) {
 
 	for _, pair := range cm.compoundPairs {
 		sfName := pair.subFields.GoIdent.GoName
-		emitCompoundSubFieldsDef(g, pair.subFields)
+		emitCompoundSubFieldsDef(g, pair.subFields, file)
 		emitCompoundWrapperDef(g, pair.wrapper, sfName)
 		g.P()
-		emitCompoundSubFieldsConstructor(g, pair.subFields)
-		emitCompoundWrapperConstructor(g, pair.wrapper, sfName)
-		emitCompoundSubFieldsEncode(g, pair.subFields)
-		emitCompoundSubFieldsDecode(g, pair.subFields)
-		emitCompoundWrapperEncode(g, pair.wrapper, sfName)
-		emitCompoundWrapperDecode(g, pair.wrapper, sfName)
+		emitCompoundSubFieldsConstructor(g, pair.subFields, "DataTypes", file)
+		emitCompoundWrapperConstructor(g, pair.wrapper, sfName, "DataTypes")
+		emitCompoundSubFieldsEncode(g, pair.subFields, "DataTypes")
+		emitCompoundSubFieldsDecode(g, pair.subFields, "DataTypes")
+		emitCompoundWrapperEncode(g, pair.wrapper, sfName, "DataTypes")
+		emitCompoundWrapperDecode(g, pair.wrapper, sfName, "DataTypes")
 	}
 
 	emitCustomCompoundDef(g)

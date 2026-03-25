@@ -23,12 +23,12 @@ func emitSimpleTypeDefs(g *protogen.GeneratedFile, msgs []*protogen.Message) {
 	}
 }
 
-func emitCompoundSubFieldsDef(g *protogen.GeneratedFile, msg *protogen.Message) {
+func emitCompoundSubFieldsDef(g *protogen.GeneratedFile, msg *protogen.Message, currentFile *protogen.File) {
 	name := msg.GoIdent.GoName
 	g.P("export type ", name, " = {")
 	for _, field := range msg.Fields {
 		luauName := snakeToCamel(string(field.Desc.Name()))
-		luauType := protoFieldToLuauType(field)
+		luauType := luauTypeRef(field, currentFile)
 		if field.Desc.Kind() == protoreflect.MessageKind {
 			g.P("\t", luauName, ": ", luauType, "?,")
 		} else {

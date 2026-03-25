@@ -40,12 +40,12 @@ func emitSimpleConstructor(g *protogen.GeneratedFile, msg *protogen.Message) {
 	g.P()
 }
 
-func emitCompoundSubFieldsConstructor(g *protogen.GeneratedFile, msg *protogen.Message) {
+func emitCompoundSubFieldsConstructor(g *protogen.GeneratedFile, msg *protogen.Message, moduleName string, currentFile *protogen.File) {
 	name := msg.GoIdent.GoName
-	g.P("function DataTypes.make", name, "(config: {")
+	g.P("function ", moduleName, ".make", name, "(config: {")
 	for _, field := range msg.Fields {
 		luauName := snakeToCamel(string(field.Desc.Name()))
-		luauType := protoFieldToLuauType(field)
+		luauType := luauTypeRef(field, currentFile)
 		g.P("\t", luauName, ": ", luauType, "?,")
 	}
 	g.P("}?): ", name)
@@ -60,9 +60,9 @@ func emitCompoundSubFieldsConstructor(g *protogen.GeneratedFile, msg *protogen.M
 	g.P()
 }
 
-func emitCompoundWrapperConstructor(g *protogen.GeneratedFile, wrapper *protogen.Message, subFieldsName string) {
+func emitCompoundWrapperConstructor(g *protogen.GeneratedFile, wrapper *protogen.Message, subFieldsName string, moduleName string) {
 	name := wrapper.GoIdent.GoName
-	g.P("function DataTypes.make", name, "(config: {")
+	g.P("function ", moduleName, ".make", name, "(config: {")
 	g.P("\ttypeId: string?,")
 	g.P("\tvalueSubFields: ", subFieldsName, "?,")
 	g.P("\tsubFieldKeysInOrder: {string}?,")

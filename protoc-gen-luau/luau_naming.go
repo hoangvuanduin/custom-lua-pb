@@ -48,6 +48,18 @@ func protoFieldToLuauType(field *protogen.Field) string {
 	}
 }
 
+// luauTypeRef returns the Luau type reference for a proto field, prefixing with "DataTypes."
+// when the field's message type lives in a different file than currentFile.
+func luauTypeRef(field *protogen.Field, currentFile *protogen.File) string {
+	if field.Desc.Kind() != protoreflect.MessageKind {
+		return protoFieldToLuauType(field)
+	}
+	if field.Message.Desc.ParentFile().Path() == currentFile.Desc.Path() {
+		return field.Message.GoIdent.GoName
+	}
+	return "DataTypes." + field.Message.GoIdent.GoName
+}
+
 // luauDefaultValue returns the Luau default for a proto field used in constructors.
 // Returns "" (empty) for fields that should default to nil (no `or` clause).
 func luauDefaultValue(field *protogen.Field) string {
