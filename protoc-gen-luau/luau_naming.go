@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path"
 	"strings"
 	"unicode"
 
@@ -96,4 +97,33 @@ func isSimpleOptionalField(msgName string, field *protogen.Field) bool {
 		return fields[string(field.Desc.Name())]
 	}
 	return false
+}
+
+// snakeToPascal converts "source_table" to "SourceTable".
+func snakeToPascal(s string) string {
+	parts := strings.Split(s, "_")
+	for i := range parts {
+		if len(parts[i]) > 0 {
+			runes := []rune(parts[i])
+			runes[0] = rune(strings.ToUpper(string(runes[0]))[0])
+			parts[i] = string(runes)
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+// deriveModuleName extracts the base name from a proto path and converts to PascalCase.
+// e.g. "tables/source_table.proto" → "SourceTable"
+func deriveModuleName(protoPath string) string {
+	base := strings.TrimSuffix(path.Base(protoPath), ".proto")
+	return snakeToPascal(base)
+}
+
+// isFieldFromDifferentFile returns true if the field's message type is defined in a
+// different proto file than currentFile.
+func isFieldFromDifferentFile(field *protogen.Field, currentFile *protogen.File) bool {
+	if field.Desc.Kind() != protoreflect.MessageKind {
+		return false
+	}
+	return field.Message.Desc.ParentFile().Path() != currentFile.Desc.Path()
 }

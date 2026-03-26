@@ -2,12 +2,16 @@ package main
 
 import (
 	"os"
+	"path"
 	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
+
+	"protoc-gen-luau/luauoptions"
 )
 
 func generateDataTypesOutput(t *testing.T) string {
@@ -19,6 +23,19 @@ func generateDataTypesOutput(t *testing.T) string {
 	req := &pluginpb.CodeGeneratorRequest{}
 	if err := proto.Unmarshal(data, req); err != nil {
 		t.Fatalf("unmarshaling: %v", err)
+	}
+	for _, pf := range req.ProtoFile {
+		if pf.Options == nil {
+			pf.Options = &descriptorpb.FileOptions{}
+		}
+		baseName := path.Base(pf.GetName())
+		baseName = strings.TrimSuffix(baseName, ".proto")
+		switch baseName {
+		case "data_types":
+			proto.SetExtension(pf.Options, luauoptions.E_LuauGenerator, "data_types")
+		case "table_schema", "source_table", "target_table":
+			proto.SetExtension(pf.Options, luauoptions.E_LuauGenerator, "schema")
+		}
 	}
 	plugin, err := protogen.Options{}.New(req)
 	if err != nil {
