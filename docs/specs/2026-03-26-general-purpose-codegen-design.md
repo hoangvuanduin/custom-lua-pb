@@ -257,7 +257,18 @@ message SubscriptionData {
 ## Testing Strategy
 
 1. **Existing golden tests** — update `testdata/request.pb` to include `luau_options` on existing proto files. Golden output should be identical (proves no regression).
-2. **New golden test** — add a test proto with the subscription-like schema structure. Verify generated Luau matches expected output.
+2. **Subscription schema golden test** — add a full test proto based on the subscription/fund domain example that exercises all field kinds the SchemaGenerator handles. This proto must include:
+   - Messages with local cross-references (e.g., `SubscriptionData` → `IndividualInvestorInfo`)
+   - Required fields (no `optional` keyword): `string type_id`, `IndividualName name`
+   - Optional scalar fields: `optional string initials`, `optional int32 share_unit`
+   - DataTypes references (optional + required): `optional RadioGroup investor_type`, `IndividualName name`
+   - Repeated DataTypes references: `repeated Signatory lp_signers`, `repeated ContactInfo primary_contacts`
+   - Repeated local message references: `repeated SubscriptionData subscriptions`
+   - Nested anonymous-like structs (proto nested messages): e.g., `FundInfo.KeyLabel` with `string key`, `optional string label`
+   - Repeated nested messages: `repeated KeyLabel communication_types`
+   - Multi-level nesting: `FundSubInterface` → `SubscriptionData` → `IndividualInvestorInfo` (3+ levels, tests topological sort)
+   - A `typeId` string discriminator field on each message (treated as regular field)
+   - Verify golden Luau output has correct dependency ordering, type refs, codecs
 3. **Unit tests** — test topological sort, field classification, repeated field handling in isolation.
 4. **Integration** — generated Luau modules should pass `luau-analyze` strict mode type checking.
 
