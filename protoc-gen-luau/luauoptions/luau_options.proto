@@ -1,0 +1,16 @@
+// protoc-gen-luau/luauoptions/luau_options.proto
+syntax = "proto3";
+package luau;
+
+option go_package = "protoc-gen-luau/luauoptions";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FileOptions {
+  // Which generator strategy to use: "data_types" | "schema"
+  string luau_generator = 51000;
+
+  // Override the require path for data_types import.
+  // Default: "@lib/data_types"
+  string luau_data_types_require = 51001;
+}
