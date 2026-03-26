@@ -427,3 +427,300 @@ func TestSchemaCodecsComplex(t *testing.T) {
 		t.Error("decode should use DataTypes.decodeJsonNumberType for repeated DataTypes nums")
 	}
 }
+
+// buildSubscriptionOutput builds a CodeGeneratorRequest with data_types.proto and
+// subscription_data.proto, runs the generator, and returns the subscription_data.luau content.
+func buildSubscriptionOutput(t *testing.T, dataTypesMessages []*descriptorpb.DescriptorProto, schemaMessages []*descriptorpb.DescriptorProto) string {
+	t.Helper()
+
+	dtOpts := &descriptorpb.FileOptions{GoPackage: proto.String("gen/datatypes;datatypes")}
+	proto.SetExtension(dtOpts, luauoptions.E_LuauGenerator, "data_types")
+
+	schemaOpts := &descriptorpb.FileOptions{GoPackage: proto.String("gen/subscription;subscription")}
+	proto.SetExtension(schemaOpts, luauoptions.E_LuauGenerator, "schema")
+	proto.SetExtension(schemaOpts, luauoptions.E_LuauDataTypesRequire, "@lib/data_types")
+
+	req := &pluginpb.CodeGeneratorRequest{
+		FileToGenerate: []string{"data_types.proto", "subscription_data.proto"},
+		ProtoFile: []*descriptorpb.FileDescriptorProto{
+			{
+				Name:        proto.String("data_types.proto"),
+				Package:     proto.String("data_types"),
+				Syntax:      proto.String("proto3"),
+				Options:     dtOpts,
+				MessageType: dataTypesMessages,
+			},
+			{
+				Name:        proto.String("subscription_data.proto"),
+				Package:     proto.String("subscription_data"),
+				Syntax:      proto.String("proto3"),
+				Options:     schemaOpts,
+				Dependency:  []string{"data_types.proto"},
+				MessageType: schemaMessages,
+			},
+		},
+	}
+
+	plugin, err := protogen.Options{}.New(req)
+	if err != nil {
+		t.Fatalf("protogen.New: %v", err)
+	}
+	if err := generate(plugin); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	resp := plugin.Response()
+	if resp.GetError() != "" {
+		t.Fatalf("plugin error: %s", resp.GetError())
+	}
+	for _, f := range resp.File {
+		if f.GetName() == "subscription_data.luau" {
+			return f.GetContent()
+		}
+	}
+	t.Fatal("subscription_data.luau not found in response")
+	return ""
+}
+
+// TestSubscriptionSchemaGolden exercises ALL field kinds the SchemaGenerator handles:
+// required string, optional string (proto3), message ref (DataTypes), optional local message,
+// repeated string, repeated DataTypes message, repeated local message.
+func TestSubscriptionSchemaGolden(t *testing.T) {
+	// data_types.proto messages
+	dtMessages := []*descriptorpb.DescriptorProto{
+		makeScalarMessage("StringType",
+			stringField("type_id", 1),
+			stringField("value", 2),
+		),
+		makeScalarMessage("RadioGroupType",
+			stringField("type_id", 1),
+			stringField("value", 2),
+		),
+		makeScalarMessage("MoneyType",
+			stringField("type_id", 1),
+			&descriptorpb.FieldDescriptorProto{
+				Name:   proto.String("value"),
+				Number: proto.Int32(2),
+				Type:   descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum(),
+				Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+			},
+		),
+		makeScalarMessage("IndividualNameType",
+			stringField("type_id", 1),
+		),
+		makeScalarMessage("SignatoryType",
+			stringField("type_id", 1),
+		),
+		makeScalarMessage("ContactInfoType",
+			stringField("type_id", 1),
+		),
+		makeScalarMessage("DateTimeType",
+			stringField("type_id", 1),
+		),
+	}
+
+	// IndividualInvestorInfo: required type_id, message ref name (IndividualNameType),
+	// optional string initials, optional string nationality
+	individualInvestorInfo := &descriptorpb.DescriptorProto{
+		Name: proto.String("IndividualInvestorInfo"),
+		Field: []*descriptorpb.FieldDescriptorProto{
+			stringField("type_id", 1),
+			messageField("name", 2, ".data_types.IndividualNameType"),
+			{
+				Name:           proto.String("initials"),
+				Number:         proto.Int32(3),
+				Type:           descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+				Label:          descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				Proto3Optional: proto.Bool(true),
+				OneofIndex:     proto.Int32(0),
+			},
+			{
+				Name:           proto.String("nationality"),
+				Number:         proto.Int32(4),
+				Type:           descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+				Label:          descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				Proto3Optional: proto.Bool(true),
+				OneofIndex:     proto.Int32(1),
+			},
+		},
+		OneofDecl: []*descriptorpb.OneofDescriptorProto{
+			{Name: proto.String("_initials")},
+			{Name: proto.String("_nationality")},
+		},
+	}
+
+	// SubscriptionWorkflowData: required type_id, message ref date_submitted (DateTimeType),
+	// optional string client_matter_id, repeated string tags
+	subscriptionWorkflowData := &descriptorpb.DescriptorProto{
+		Name: proto.String("SubscriptionWorkflowData"),
+		Field: []*descriptorpb.FieldDescriptorProto{
+			stringField("type_id", 1),
+			messageField("date_submitted", 2, ".data_types.DateTimeType"),
+			{
+				Name:           proto.String("client_matter_id"),
+				Number:         proto.Int32(3),
+				Type:           descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+				Label:          descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				Proto3Optional: proto.Bool(true),
+				OneofIndex:     proto.Int32(0),
+			},
+			repeatedStringField("tags", 4),
+		},
+		OneofDecl: []*descriptorpb.OneofDescriptorProto{
+			{Name: proto.String("_client_matter_id")},
+		},
+	}
+
+	// SubscriptionData: required type_id, optional DataTypes refs, optional local refs,
+	// repeated DataTypes refs, repeated local refs
+	subscriptionData := &descriptorpb.DescriptorProto{
+		Name: proto.String("SubscriptionData"),
+		Field: []*descriptorpb.FieldDescriptorProto{
+			stringField("type_id", 1),
+			messageField("investor_type", 2, ".data_types.RadioGroupType"),
+			messageField("individual_investor", 3, ".subscription_data.IndividualInvestorInfo"),
+			messageField("commitment_amount", 4, ".data_types.MoneyType"),
+			repeatedMessageField("primary_contacts", 5, ".data_types.ContactInfoType"),
+			repeatedMessageField("lp_signers", 6, ".data_types.SignatoryType"),
+			messageField("workflow_data", 7, ".subscription_data.SubscriptionWorkflowData"),
+		},
+	}
+
+	// FundSubInterface: required type_id, repeated local SubscriptionData
+	fundSubInterface := &descriptorpb.DescriptorProto{
+		Name: proto.String("FundSubInterface"),
+		Field: []*descriptorpb.FieldDescriptorProto{
+			stringField("type_id", 1),
+			repeatedMessageField("subscriptions", 2, ".subscription_data.SubscriptionData"),
+		},
+	}
+
+	// Pass messages in reverse dependency order to verify topo sort works
+	output := buildSubscriptionOutput(t, dtMessages, []*descriptorpb.DescriptorProto{
+		fundSubInterface,
+		subscriptionData,
+		subscriptionWorkflowData,
+		individualInvestorInfo,
+	})
+
+	// --- 1. Dependency ordering ---
+	// IndividualInvestorInfo and SubscriptionWorkflowData must precede SubscriptionData
+	iiIdx := strings.Index(output, "export type IndividualInvestorInfo = {")
+	wdIdx := strings.Index(output, "export type SubscriptionWorkflowData = {")
+	sdIdx := strings.Index(output, "export type SubscriptionData = {")
+	fsiIdx := strings.Index(output, "export type FundSubInterface = {")
+
+	if iiIdx < 0 {
+		t.Error("missing IndividualInvestorInfo type def")
+	}
+	if wdIdx < 0 {
+		t.Error("missing SubscriptionWorkflowData type def")
+	}
+	if sdIdx < 0 {
+		t.Error("missing SubscriptionData type def")
+	}
+	if fsiIdx < 0 {
+		t.Error("missing FundSubInterface type def")
+	}
+	if iiIdx >= sdIdx {
+		t.Error("IndividualInvestorInfo should appear before SubscriptionData (topo sort)")
+	}
+	if wdIdx >= sdIdx {
+		t.Error("SubscriptionWorkflowData should appear before SubscriptionData (topo sort)")
+	}
+	if sdIdx >= fsiIdx {
+		t.Error("SubscriptionData should appear before FundSubInterface (topo sort)")
+	}
+
+	// --- 2. Type def correctness ---
+	// Message ref (DataTypes) = optional
+	if !strings.Contains(output, "\tname: DataTypes.IndividualNameType?,") {
+		t.Error("name should be DataTypes.IndividualNameType? (message ref = optional)")
+	}
+	// proto3 optional string
+	if !strings.Contains(output, "\tinitials: string?,") {
+		t.Error("initials should be string? (proto3 optional)")
+	}
+	// Required string — no ?
+	if !strings.Contains(output, "\ttypeId: string,") {
+		t.Error("typeId should be required string (no ?)")
+	}
+	// Repeated DataTypes ref — no ?
+	if !strings.Contains(output, "\tprimaryContacts: {DataTypes.ContactInfoType},") {
+		t.Error("primaryContacts should be {DataTypes.ContactInfoType} (repeated, no ?)")
+	}
+	// Repeated local ref — no ?
+	if !strings.Contains(output, "\tsubscriptions: {SubscriptionData},") {
+		t.Error("subscriptions should be {SubscriptionData} (repeated local, no ?)")
+	}
+	// Optional local ref — has ?
+	if !strings.Contains(output, "\tindividualInvestor: IndividualInvestorInfo?,") {
+		t.Error("individualInvestor should be IndividualInvestorInfo? (optional local ref)")
+	}
+
+	// --- 3. Constructor existence ---
+	if !strings.Contains(output, "function SubscriptionData.makeIndividualInvestorInfo(") {
+		t.Error("missing makeIndividualInvestorInfo constructor")
+	}
+	if !strings.Contains(output, "function SubscriptionData.makeSubscriptionWorkflowData(") {
+		t.Error("missing makeSubscriptionWorkflowData constructor")
+	}
+	if !strings.Contains(output, "function SubscriptionData.makeSubscriptionData(") {
+		t.Error("missing makeSubscriptionData constructor")
+	}
+	if !strings.Contains(output, "function SubscriptionData.makeFundSubInterface(") {
+		t.Error("missing makeFundSubInterface constructor")
+	}
+
+	// --- 4. Codec existence ---
+	if !strings.Contains(output, "function SubscriptionData.encodeJsonIndividualInvestorInfo(") {
+		t.Error("missing encodeJsonIndividualInvestorInfo")
+	}
+	if !strings.Contains(output, "function SubscriptionData.decodeJsonIndividualInvestorInfo(") {
+		t.Error("missing decodeJsonIndividualInvestorInfo")
+	}
+	if !strings.Contains(output, "function SubscriptionData.encodeJsonSubscriptionWorkflowData(") {
+		t.Error("missing encodeJsonSubscriptionWorkflowData")
+	}
+	if !strings.Contains(output, "function SubscriptionData.decodeJsonSubscriptionWorkflowData(") {
+		t.Error("missing decodeJsonSubscriptionWorkflowData")
+	}
+	if !strings.Contains(output, "function SubscriptionData.encodeJsonSubscriptionData(") {
+		t.Error("missing encodeJsonSubscriptionData")
+	}
+	if !strings.Contains(output, "function SubscriptionData.decodeJsonSubscriptionData(") {
+		t.Error("missing decodeJsonSubscriptionData")
+	}
+	if !strings.Contains(output, "function SubscriptionData.encodeJsonFundSubInterface(") {
+		t.Error("missing encodeJsonFundSubInterface")
+	}
+	if !strings.Contains(output, "function SubscriptionData.decodeJsonFundSubInterface(") {
+		t.Error("missing decodeJsonFundSubInterface")
+	}
+
+	// --- 5. Encode patterns ---
+	// Repeated DataTypes ref iteration
+	if !strings.Contains(output, "DataTypes.encodeJsonContactInfoType(item)") {
+		t.Error("encode should iterate primaryContacts with DataTypes.encodeJsonContactInfoType(item)")
+	}
+	// Repeated local ref iteration
+	if !strings.Contains(output, "SubscriptionData.encodeJsonSubscriptionData(item)") {
+		t.Error("encode should iterate subscriptions with SubscriptionData.encodeJsonSubscriptionData(item)")
+	}
+	// Optional local ref encode — param name for SubscriptionData is "su" (s-collision avoidance)
+	if !strings.Contains(output, "SubscriptionData.encodeJsonIndividualInvestorInfo(su.individualInvestor)") {
+		t.Error("encode should call SubscriptionData.encodeJsonIndividualInvestorInfo(su.individualInvestor) for optional local ref")
+	}
+
+	// --- 6. Optional helpers ---
+	if !strings.Contains(output, "local function decodeOptionalRadioGroupType(") {
+		t.Error("missing decodeOptionalRadioGroupType helper")
+	}
+	if !strings.Contains(output, "local function encodeOptionalMoneyType(") {
+		t.Error("missing encodeOptionalMoneyType helper")
+	}
+
+	// --- 7. Footer ---
+	if !strings.Contains(output, "return SubscriptionData") {
+		t.Error("missing 'return SubscriptionData' footer")
+	}
+}
