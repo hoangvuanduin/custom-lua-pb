@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"strings"
 
 	"google.golang.org/protobuf/compiler/protogen"
@@ -328,7 +329,7 @@ func emitSchemaOptionalHelpers(g *protogen.GeneratedFile, msgs []*protogen.Messa
 	for name := range typeSet {
 		typeNames = append(typeNames, name)
 	}
-	sortStrings(typeNames)
+	sort.Strings(typeNames)
 
 	for _, typeName := range typeNames {
 		g.P("local function decodeOptional", typeName, "(json: any): DataTypes.", typeName, "?")
@@ -342,14 +343,5 @@ func emitSchemaOptionalHelpers(g *protogen.GeneratedFile, msgs []*protogen.Messa
 	}
 	if len(typeNames) > 0 {
 		g.P()
-	}
-}
-
-// sortStrings sorts a string slice in place.
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
 	}
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"path"
 	"strings"
 
@@ -30,8 +29,8 @@ func generateSchema(plugin *protogen.Plugin, file *protogen.File) {
 	// Topological sort for correct dependency ordering
 	sorted, err := topoSortMessages(genericMsgs, file.Desc)
 	if err != nil {
-		g.P(fmt.Sprintf("-- ERROR: %v", err))
-		return
+		// Fall back to original order on cycle detection
+		sorted = genericMsgs
 	}
 
 	// === Header ===
