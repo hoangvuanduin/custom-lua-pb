@@ -230,15 +230,20 @@ function SourceTable.decodeJsonW9Type(json: {[string]: any}): W9Type
 	}
 end
 
-function SourceTable.encodeJsonSourceTableFieldsMap(fm: SourceTableFieldsMap): {[string]: any}
-	local result: {[string]: any} = {}
-	if fm.lpSignatory then result.lpSignatory = SourceTable.encodeJsonLpSignatoryType(fm.lpSignatory) end
-	result.asaFullnameInvestornameAmlquestionnaire = encodeOptionalStringType(fm.asaFullnameInvestornameAmlquestionnaire)
-	result.asaFullnameInvestornameGeneralinfo1 = encodeOptionalStringType(fm.asaFullnameInvestornameGeneralinfo1)
-	result.luxsentityRegulatedstatusPart2Duediligencequestionnaire = encodeOptionalMultipleCheckboxType(fm.luxsentityRegulatedstatusPart2Duediligencequestionnaire)
-	result.indiInternationalsupplementsPart1Duediligencequestionnaire = encodeOptionalMultipleCheckboxType(fm.indiInternationalsupplementsPart1Duediligencequestionnaire)
-	result.entityInternationalsupplementsPart1Duediligencequestionnaire = encodeOptionalMultipleCheckboxType(fm.entityInternationalsupplementsPart1Duediligencequestionnaire)
-	if fm.w9 then result.w9 = SourceTable.encodeJsonW9Type(fm.w9) end
+function SourceTable.encodeJsonSourceTableFieldsMap(so: SourceTableFieldsMap): {[string]: any}
+	local result: {[string]: any} = {
+	}
+	if so.lpSignatory ~= nil then
+		result.lpSignatory = SourceTable.encodeJsonLpSignatoryType(so.lpSignatory)
+	end
+	result.asaFullnameInvestornameAmlquestionnaire = encodeOptionalStringType(so.asaFullnameInvestornameAmlquestionnaire)
+	result.asaFullnameInvestornameGeneralinfo1 = encodeOptionalStringType(so.asaFullnameInvestornameGeneralinfo1)
+	result.luxsentityRegulatedstatusPart2Duediligencequestionnaire = encodeOptionalMultipleCheckboxType(so.luxsentityRegulatedstatusPart2Duediligencequestionnaire)
+	result.indiInternationalsupplementsPart1Duediligencequestionnaire = encodeOptionalMultipleCheckboxType(so.indiInternationalsupplementsPart1Duediligencequestionnaire)
+	result.entityInternationalsupplementsPart1Duediligencequestionnaire = encodeOptionalMultipleCheckboxType(so.entityInternationalsupplementsPart1Duediligencequestionnaire)
+	if so.w9 ~= nil then
+		result.w9 = SourceTable.encodeJsonW9Type(so.w9)
+	end
 	return result
 end
 
@@ -254,13 +259,13 @@ function SourceTable.decodeJsonSourceTableFieldsMap(json: {[string]: any}): Sour
 	}
 end
 
-function SourceTable.encodeJsonSourceTableSchema(schema: SourceTableSchema): {[string]: any}
+function SourceTable.encodeJsonSourceTableSchema(so: SourceTableSchema): {[string]: any}
 	local result: {[string]: any} = {
-		fieldKeysInOrder = schema.fieldKeysInOrder,
-		label = schema.label,
+		fieldKeysInOrder = so.fieldKeysInOrder,
+		label = so.label,
 	}
-	if schema.fieldsMap ~= nil then
-		result.fieldsMap = SourceTable.encodeJsonSourceTableFieldsMap(schema.fieldsMap)
+	if so.fieldsMap ~= nil then
+		result.fieldsMap = SourceTable.encodeJsonSourceTableFieldsMap(so.fieldsMap)
 	end
 	return result
 end

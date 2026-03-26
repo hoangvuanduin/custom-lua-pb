@@ -66,8 +66,15 @@ func TestTableSchemaOutput(t *testing.T) {
 	if !strings.Contains(output, "export type SingleFieldType = {") {
 		t.Error("missing SingleFieldType def")
 	}
-	if !strings.Contains(output, "value: DataTypes.FieldValue?,") {
-		t.Error("SingleFieldType.value should be DataTypes.FieldValue?")
+	// SingleFieldType has individual DataTypes fields (stringType, numberType, etc.)
+	if !strings.Contains(output, "stringType: DataTypes.StringType?,") {
+		t.Error("SingleFieldType should have stringType: DataTypes.StringType?")
+	}
+	if !strings.Contains(output, "numberType: DataTypes.NumberType?,") {
+		t.Error("SingleFieldType should have numberType: DataTypes.NumberType?")
+	}
+	if !strings.Contains(output, "label: string,") {
+		t.Error("SingleFieldType should have required label: string")
 	}
 	if !strings.Contains(output, "export type FieldGroup = {") {
 		t.Error("missing FieldGroup def")
@@ -83,13 +90,14 @@ func TestTableSchemaOutput(t *testing.T) {
 			t.Errorf("missing constructor %s", fn)
 		}
 	}
-	for _, fn := range []string{"encodeJsonSingleFieldType", "decodeJsonSingleFieldType", "encodeJsonTableSchema", "decodeJsonTableSchema"} {
+	for _, fn := range []string{"encodeJsonSingleFieldType", "decodeJsonSingleFieldType", "encodeJsonFieldGroup", "decodeJsonFieldGroup", "encodeJsonTableSchema", "decodeJsonTableSchema"} {
 		if !strings.Contains(output, "function TableSchema."+fn+"(") {
 			t.Errorf("missing codec %s", fn)
 		}
 	}
-	if !strings.Contains(output, "DataTypes.encodeFieldValueByTypeId") {
-		t.Error("SingleFieldType encode should use DataTypes.encodeFieldValueByTypeId")
+	// SingleFieldType encode should use optional helpers for DataTypes types
+	if !strings.Contains(output, "encodeOptionalStringType(") {
+		t.Error("SingleFieldType encode should use encodeOptionalStringType helper")
 	}
 	if !strings.HasSuffix(strings.TrimSpace(output), "return TableSchema") {
 		t.Error("missing return TableSchema footer")
@@ -196,7 +204,7 @@ func TestSourceTableOutput(t *testing.T) {
 	if !strings.Contains(output, "function SourceTable.encodeJsonSourceTableFieldsMap(") {
 		t.Error("missing encodeJsonSourceTableFieldsMap")
 	}
-	if !strings.Contains(output, "SourceTable.encodeJsonLpSignatoryType(fm.lpSignatory)") {
+	if !strings.Contains(output, "SourceTable.encodeJsonLpSignatoryType(so.lpSignatory)") {
 		t.Error("FieldsMap encode should use SourceTable.encodeJsonLpSignatoryType for local compound")
 	}
 
@@ -288,7 +296,7 @@ func TestTargetTableOutput(t *testing.T) {
 	}
 
 	// All fields use optional helpers (no local compounds in target_table)
-	if !strings.Contains(output, "encodeOptionalMoneyType(fm.sfAgreementNullCommitmentC)") {
+	if !strings.Contains(output, "encodeOptionalMoneyType(ta.sfAgreementNullCommitmentC)") {
 		t.Error("FieldsMap encode should use encodeOptionalMoneyType for MoneyType field")
 	}
 	if !strings.Contains(output, "decodeOptionalStringType(json.sfAccountSubscriptionInvestorName)") {

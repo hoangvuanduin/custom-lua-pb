@@ -89,16 +89,17 @@ local function encodeOptionalStringType(v: DataTypes.StringType?): {[string]: an
 	return DataTypes.encodeJsonStringType(v)
 end
 
-function TargetTable.encodeJsonTargetTableFieldsMap(fm: TargetTableFieldsMap): {[string]: any}
-	local result: {[string]: any} = {}
-	result.sfAgreementNullCommitmentC = encodeOptionalMoneyType(fm.sfAgreementNullCommitmentC)
-	result.sfAccountSubscriptionInvestorName = encodeOptionalStringType(fm.sfAccountSubscriptionInvestorName)
-	result.sfAccountSubscriptionInvestorWlcPubliclyListedOnAStockExchangeC = encodeOptionalRadioGroupType(fm.sfAccountSubscriptionInvestorWlcPubliclyListedOnAStockExchangeC)
-	result.sfAgreementNullWlcInternationalSupplementsC = encodeOptionalMultipleCheckboxType(fm.sfAgreementNullWlcInternationalSupplementsC)
-	result.sfAgreementNullSignerFirstName = encodeOptionalStringType(fm.sfAgreementNullSignerFirstName)
-	result.sfAgreementNullSignerMiddleName = encodeOptionalStringType(fm.sfAgreementNullSignerMiddleName)
-	result.sfAgreementNullSignerLastName = encodeOptionalStringType(fm.sfAgreementNullSignerLastName)
-	result.sfTaxFormW9UsTinTypeC = encodeOptionalRadioGroupType(fm.sfTaxFormW9UsTinTypeC)
+function TargetTable.encodeJsonTargetTableFieldsMap(ta: TargetTableFieldsMap): {[string]: any}
+	local result: {[string]: any} = {
+	}
+	result.sfAgreementNullCommitmentC = encodeOptionalMoneyType(ta.sfAgreementNullCommitmentC)
+	result.sfAccountSubscriptionInvestorName = encodeOptionalStringType(ta.sfAccountSubscriptionInvestorName)
+	result.sfAccountSubscriptionInvestorWlcPubliclyListedOnAStockExchangeC = encodeOptionalRadioGroupType(ta.sfAccountSubscriptionInvestorWlcPubliclyListedOnAStockExchangeC)
+	result.sfAgreementNullWlcInternationalSupplementsC = encodeOptionalMultipleCheckboxType(ta.sfAgreementNullWlcInternationalSupplementsC)
+	result.sfAgreementNullSignerFirstName = encodeOptionalStringType(ta.sfAgreementNullSignerFirstName)
+	result.sfAgreementNullSignerMiddleName = encodeOptionalStringType(ta.sfAgreementNullSignerMiddleName)
+	result.sfAgreementNullSignerLastName = encodeOptionalStringType(ta.sfAgreementNullSignerLastName)
+	result.sfTaxFormW9UsTinTypeC = encodeOptionalRadioGroupType(ta.sfTaxFormW9UsTinTypeC)
 	return result
 end
 
@@ -115,13 +116,13 @@ function TargetTable.decodeJsonTargetTableFieldsMap(json: {[string]: any}): Targ
 	}
 end
 
-function TargetTable.encodeJsonTargetTableSchema(schema: TargetTableSchema): {[string]: any}
+function TargetTable.encodeJsonTargetTableSchema(ta: TargetTableSchema): {[string]: any}
 	local result: {[string]: any} = {
-		fieldKeysInOrder = schema.fieldKeysInOrder,
-		label = schema.label,
+		fieldKeysInOrder = ta.fieldKeysInOrder,
+		label = ta.label,
 	}
-	if schema.fieldsMap ~= nil then
-		result.fieldsMap = TargetTable.encodeJsonTargetTableFieldsMap(schema.fieldsMap)
+	if ta.fieldsMap ~= nil then
+		result.fieldsMap = TargetTable.encodeJsonTargetTableFieldsMap(ta.fieldsMap)
 	end
 	return result
 end

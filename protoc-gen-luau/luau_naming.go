@@ -127,3 +127,106 @@ func isFieldFromDifferentFile(field *protogen.Field, currentFile *protogen.File)
 	}
 	return field.Message.Desc.ParentFile().Path() != currentFile.Desc.Path()
 }
+
+// luauTypeRefGeneric returns the Luau type string for a field in a generic schema.
+// Handles scalar, message (local vs imported), repeated, and map fields.
+func luauTypeRefGeneric(field *protogen.Field, currentFile *protogen.File) string {
+	if field.Desc.IsMap() {
+		valField := field.Message.Fields[1] // map value is second field of entry message
+		valType := luauTypeRefGeneric(valField, currentFile)
+		return "{[string]: " + valType + "}"
+	}
+	if field.Desc.IsList() {
+		return "{" + luauElementType(field, currentFile) + "}"
+	}
+	if field.Desc.Kind() == protoreflect.MessageKind {
+		if field.Message.Desc.ParentFile().Path() == currentFile.Desc.Path() {
+			return field.Message.GoIdent.GoName
+		}
+		return "DataTypes." + field.Message.GoIdent.GoName
+	}
+	return scalarLuauType(field)
+}
+
+// luauElementType returns the Luau element type for a repeated field.
+func luauElementType(field *protogen.Field, currentFile *protogen.File) string {
+	switch field.Desc.Kind() {
+	case protoreflect.StringKind:
+		return "string"
+	case protoreflect.DoubleKind, protoreflect.Int32Kind, protoreflect.FloatKind, protoreflect.Int64Kind:
+		return "number"
+	case protoreflect.BoolKind:
+		return "boolean"
+	case protoreflect.MessageKind:
+		if field.Message.Desc.ParentFile().Path() == currentFile.Desc.Path() {
+			return field.Message.GoIdent.GoName
+		}
+		return "DataTypes." + field.Message.GoIdent.GoName
+	default:
+		return "any"
+	}
+}
+
+// scalarLuauType returns the Luau type for a scalar proto field kind.
+func scalarLuauType(field *protogen.Field) string {
+	switch field.Desc.Kind() {
+	case protoreflect.StringKind:
+		return "string"
+	case protoreflect.DoubleKind, protoreflect.Int32Kind, protoreflect.FloatKind, protoreflect.Int64Kind:
+		return "number"
+	case protoreflect.BoolKind:
+		return "boolean"
+	default:
+		return "any"
+	}
+}
+
+// isFieldOptional determines if a field gets ? suffix in Luau type definition.
+// Repeated/map fields are always present (no ?). Scalars with `optional` keyword
+// and message fields are optional.
+func isFieldOptional(field *protogen.Field) bool {
+	if field.Desc.IsList() || field.Desc.IsMap() {
+		return false
+	}
+	if field.Desc.HasOptionalKeyword() {
+		return true
+	}
+	if field.Desc.Kind() == protoreflect.MessageKind {
+		return true
+	}
+	return false
+}
+
+// luauDefaultValueGeneric returns the Luau default for constructor/decoder.
+// Returns "" (empty) for fields that should default to nil (no `or` clause),
+// and "" for booleans which need special handling.
+func luauDefaultValueGeneric(field *protogen.Field) string {
+	if field.Desc.IsList() || field.Desc.IsMap() {
+		return "{}"
+	}
+	if field.Desc.Kind() == protoreflect.MessageKind {
+		return "" // nil, no default
+	}
+	if field.Desc.HasOptionalKeyword() {
+		return "" // nil is valid
+	}
+	switch field.Desc.Kind() {
+	case protoreflect.StringKind:
+		return `""`
+	case protoreflect.DoubleKind, protoreflect.Int32Kind, protoreflect.FloatKind, protoreflect.Int64Kind:
+		return "0"
+	case protoreflect.BoolKind:
+		return "" // special handling: if c.value ~= nil then c.value else false
+	default:
+		return `""`
+	}
+}
+
+// isFieldValueType returns true if the field references the FieldValue type
+// from DataTypes (which uses dispatch codecs instead of standard encode/decode).
+func isFieldValueType(field *protogen.Field) bool {
+	if field.Desc.Kind() != protoreflect.MessageKind {
+		return false
+	}
+	return field.Message.GoIdent.GoName == "FieldValue"
+}
