@@ -18,6 +18,7 @@ type LuauGenerator interface {
 var generators = map[string]LuauGenerator{
 	"data_types": &DataTypesGenerator{},
 	"schema":     &SchemaGenerator{},
+	"mapping":    &MappingGenerator{},
 }
 
 // getGeneratorType reads the luau_generator file option from a proto file.
@@ -60,6 +61,13 @@ type SchemaGenerator struct{}
 
 func (s *SchemaGenerator) Generate(plugin *protogen.Plugin, file *protogen.File) {
 	generateSchema(plugin, file)
+}
+
+// MappingGenerator generates mapping glue code from annotated proto messages.
+type MappingGenerator struct{}
+
+func (m *MappingGenerator) Generate(plugin *protogen.Plugin, file *protogen.File) {
+	generateMapping(plugin, file)
 }
 
 // lookupGenerator returns the generator for the given type, or an error.

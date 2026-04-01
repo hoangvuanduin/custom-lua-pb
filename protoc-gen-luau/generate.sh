@@ -18,3 +18,24 @@ protoc \
   tables/source_contact_table.proto tables/source_w9_table.proto \
   tables/source_feeder_table.proto tables/source_master_table.proto \
   tables/full_target_table.proto
+
+# --- Mapping protos (optional) ---
+MAPPINGS_DIR="$PROTO_DIR/mappings"
+if [ -d "$MAPPINGS_DIR" ]; then
+  MAPPING_PROTOS=()
+  MAPPING_MFLAGS="Mdata_types.proto=placeholder/data_types"
+  for f in "$MAPPINGS_DIR"/*.proto; do
+    [ -f "$f" ] || continue
+    rel="mappings/$(basename "$f")"
+    MAPPING_PROTOS+=("$rel")
+    MAPPING_MFLAGS="$MAPPING_MFLAGS,M${rel}=placeholder/${rel%.proto}"
+  done
+  if [ ${#MAPPING_PROTOS[@]} -gt 0 ]; then
+    protoc \
+      --plugin=protoc-gen-luau="$SCRIPT_DIR/protoc-gen-luau" \
+      "--luau_out=${MAPPING_MFLAGS}:$OUTPUT_DIR" \
+      -I "$PROTO_DIR" \
+      -I "$SCRIPT_DIR" \
+      "${MAPPING_PROTOS[@]}"
+  fi
+fi
