@@ -84,7 +84,7 @@ func makeMappingField(name string, number int32, isSource bool, path string) *de
 	return fd
 }
 
-func TestMappingSingleOutput(t *testing.T) {
+func TestMappingNestedInput(t *testing.T) {
 	msg := &descriptorpb.DescriptorProto{
 		Name: proto.String("TextboxOccupation"),
 		Field: []*descriptorpb.FieldDescriptorProto{
@@ -96,85 +96,50 @@ func TestMappingSingleOutput(t *testing.T) {
 
 	files := buildMappingOutput(t, "test_mappings.proto", []*descriptorpb.DescriptorProto{msg})
 
-	// Types file should exist with Input AND Output
-	typesContent, ok := files["test_mappings_types.luau"]
-	if !ok {
-		t.Fatal("test_mappings_types.luau not found")
-	}
+	// Types file — input nested by namespace
+	typesContent := files["test_mappings_types.luau"]
 	if !strings.Contains(typesContent, "export type TextboxOccupationInput = {") {
-		t.Error("missing TextboxOccupationInput type")
+		t.Error("missing TextboxOccupationInput")
 	}
-	// Input fields use actual path as struct field name
-	if !strings.Contains(typesContent, "masterAsaOccupation: DataTypes.StringType?,") {
-		t.Error("missing masterAsaOccupation field in input type")
+	if !strings.Contains(typesContent, "master: {") {
+		t.Error("missing master namespace group in input type")
 	}
-	if !strings.Contains(typesContent, "feederAsaOccupation: DataTypes.StringType?,") {
-		t.Error("missing feederAsaOccupation field in input type")
+	if !strings.Contains(typesContent, "asaOccupation: DataTypes.StringType?,") {
+		t.Error("missing asaOccupation field inside namespace")
 	}
+	if !strings.Contains(typesContent, "feeder: {") {
+		t.Error("missing feeder namespace group")
+	}
+
+	// Output type — flat with target field name
 	if !strings.Contains(typesContent, "export type TextboxOccupationOutput = {") {
-		t.Error("missing TextboxOccupationOutput type")
+		t.Error("missing TextboxOccupationOutput")
 	}
-	// Output field uses target field name without "target." prefix
 	if !strings.Contains(typesContent, "sfOccupation: DataTypes.StringType?,") {
-		t.Error("missing sfOccupation field in output type")
+		t.Error("missing sfOccupation in output type")
 	}
 
-	// Generated file
-	generated, ok := files["test_mappings_generated.luau"]
-	if !ok {
-		t.Fatal("test_mappings_generated.luau not found")
+	// Generated glue — nested extraction
+	generated := files["test_mappings_generated.luau"]
+	if !strings.Contains(generated, "master = if input and input.master then {") {
+		t.Error("missing nested master extraction")
+	}
+	if !strings.Contains(generated, "asaOccupation = input.master and input.master.asaOccupation or nil,") {
+		t.Error("missing asaOccupation extraction inside master")
 	}
 
-	// Glue builds input struct
-	if !strings.Contains(generated, "local transformInput = {") {
-		t.Error("missing transformInput struct construction")
-	}
-	if !strings.Contains(generated, "masterAsaOccupation = input.master and input.master.asaOccupation or nil,") {
-		t.Error("missing masterAsaOccupation extraction in struct")
-	}
-
-	// Glue calls transform with struct
+	// Transform call
 	if !strings.Contains(generated, "local result = Transforms.textboxOccupation(transformInput)") {
-		t.Error("missing transform call with struct param")
+		t.Error("missing transform call")
 	}
 
-	// Glue unpacks output
-	if !strings.Contains(generated, "result.sfOccupation") {
-		t.Error("missing result.sfOccupation access")
-	}
+	// Output unpacking
 	if !strings.Contains(generated, "output.target.sfOccupation = result.sfOccupation") {
 		t.Error("missing target assignment")
 	}
 }
 
-func TestMappingMultiOutput(t *testing.T) {
-	msg := &descriptorpb.DescriptorProto{
-		Name: proto.String("NameSplitSigner"),
-		Field: []*descriptorpb.FieldDescriptorProto{
-			makeMappingField("master_signer", 1, true, "master.signer_name"),
-			makeMappingField("first_name", 2, false, "target.sf_signer_first_name"),
-			makeMappingField("middle_name", 3, false, "target.sf_signer_middle_name"),
-			makeMappingField("last_name", 4, false, "target.sf_signer_last_name"),
-		},
-	}
-
-	files := buildMappingOutput(t, "test_mappings.proto", []*descriptorpb.DescriptorProto{msg})
-
-	typesContent := files["test_mappings_types.luau"]
-	if !strings.Contains(typesContent, "export type NameSplitSignerOutput = {") {
-		t.Error("missing NameSplitSignerOutput")
-	}
-	if !strings.Contains(typesContent, "sfSignerFirstName: DataTypes.StringType?,") {
-		t.Error("missing sfSignerFirstName in output type")
-	}
-
-	generated := files["test_mappings_generated.luau"]
-	if !strings.Contains(generated, "result.sfSignerFirstName") {
-		t.Error("missing result.sfSignerFirstName access")
-	}
-}
-
-func TestMappingCompoundPath(t *testing.T) {
+func TestMappingCompoundNestedInput(t *testing.T) {
 	msg := &descriptorpb.DescriptorProto{
 		Name: proto.String("TextboxBankName"),
 		Field: []*descriptorpb.FieldDescriptorProto{
@@ -185,15 +150,57 @@ func TestMappingCompoundPath(t *testing.T) {
 
 	files := buildMappingOutput(t, "test_mappings.proto", []*descriptorpb.DescriptorProto{msg})
 
+	// Types — nested compound path
 	typesContent := files["test_mappings_types.luau"]
-	// Compound source path: all segments joined
-	if !strings.Contains(typesContent, "masterWireInstructionsAsaBankname: DataTypes.StringType?,") {
-		t.Error("missing compound path struct field in input type")
+	if !strings.Contains(typesContent, "master: {") {
+		t.Error("missing master in type")
+	}
+	if !strings.Contains(typesContent, "wireInstructions: {") {
+		t.Error("missing wireInstructions in type")
+	}
+	if !strings.Contains(typesContent, "valueSubFields: {") {
+		t.Error("missing valueSubFields in type")
+	}
+	if !strings.Contains(typesContent, "asaBankname: DataTypes.StringType?,") {
+		t.Error("missing asaBankname leaf in type")
+	}
+
+	// Generated — nested extraction through valueSubFields
+	generated := files["test_mappings_generated.luau"]
+	if !strings.Contains(generated, "valueSubFields = if input.master.wireInstructions and input.master.wireInstructions.valueSubFields then {") {
+		t.Error("missing valueSubFields extraction")
+	}
+}
+
+func TestMappingMultiOutput(t *testing.T) {
+	msg := &descriptorpb.DescriptorProto{
+		Name: proto.String("NameSplitSigner"),
+		Field: []*descriptorpb.FieldDescriptorProto{
+			makeMappingField("full_name", 1, true, "master.signer_name"),
+			makeMappingField("first_name", 2, false, "target.sf_first_name"),
+			makeMappingField("middle_name", 3, false, "target.sf_middle_name"),
+			makeMappingField("last_name", 4, false, "target.sf_last_name"),
+		},
+	}
+
+	files := buildMappingOutput(t, "test_mappings.proto", []*descriptorpb.DescriptorProto{msg})
+
+	typesContent := files["test_mappings_types.luau"]
+	if !strings.Contains(typesContent, "sfFirstName: DataTypes.StringType?,") {
+		t.Error("missing sfFirstName in output type")
+	}
+	if !strings.Contains(typesContent, "sfMiddleName: DataTypes.StringType?,") {
+		t.Error("missing sfMiddleName in output type")
+	}
+	if !strings.Contains(typesContent, "sfLastName: DataTypes.StringType?,") {
+		t.Error("missing sfLastName in output type")
 	}
 
 	generated := files["test_mappings_generated.luau"]
-	expectedExtraction := "masterWireInstructionsAsaBankname = input.master and input.master.wireInstructions and input.master.wireInstructions.valueSubFields and input.master.wireInstructions.valueSubFields.asaBankname or nil,"
-	if !strings.Contains(generated, expectedExtraction) {
-		t.Errorf("missing compound path extraction.\nwant: %s", expectedExtraction)
+	if !strings.Contains(generated, "result.sfFirstName") {
+		t.Error("missing result.sfFirstName access")
+	}
+	if !strings.Contains(generated, "result.sfMiddleName") {
+		t.Error("missing result.sfMiddleName access")
 	}
 }

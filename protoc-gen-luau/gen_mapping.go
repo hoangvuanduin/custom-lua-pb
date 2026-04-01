@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"path"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -13,10 +15,9 @@ import (
 
 // mappingField represents a single source or target field in a mapping rule.
 type mappingField struct {
-	structField string   // field name in the Input/Output struct (derived from actual path)
-	rawPath     string   // original annotation value e.g. "master.some_field"
-	pathParts   []string // split by ".", each part converted to camelCase
-	isSource    bool
+	rawPath   string   // original annotation value e.g. "master.some_field"
+	pathParts []string // split by ".", each part converted to camelCase
+	isSource  bool
 }
 
 // mappingRule represents one proto message that defines a mapping rule.
@@ -56,54 +57,19 @@ func parseMappingRules(file *protogen.File) []mappingRule {
 	return rules
 }
 
-// parseMappingField converts a raw annotation path into a mappingField.
-// For sources: "master.some_field" → structField "masterSomeField"
-// For sources (compound): "master.wire_instructions.bank_name" → structField "masterWireInstructionsBankName"
-// For targets: "target.sf_some_field" → structField "sfSomeField" (strips "target." prefix)
 func parseMappingField(rawPath string, isSource bool) mappingField {
 	parts := strings.Split(rawPath, ".")
 	camelParts := make([]string, len(parts))
 	for i, p := range parts {
 		camelParts[i] = snakeToCamel(p)
 	}
-
-	var structField string
-	if isSource {
-		// Join all camelCase parts: "master" + "SomeField" → "masterSomeField"
-		structField = camelParts[0]
-		for _, p := range camelParts[1:] {
-			// Capitalize first char of each subsequent part
-			runes := []rune(p)
-			if len(runes) > 0 {
-				runes[0] = unicode.ToUpper(runes[0])
-			}
-			structField += string(runes)
-		}
-	} else {
-		// For targets, strip "target." prefix — use the field name directly
-		if len(camelParts) >= 2 {
-			structField = camelParts[1]
-			for _, p := range camelParts[2:] {
-				runes := []rune(p)
-				if len(runes) > 0 {
-					runes[0] = unicode.ToUpper(runes[0])
-				}
-				structField += string(runes)
-			}
-		} else {
-			structField = strings.Join(camelParts, "")
-		}
-	}
-
 	return mappingField{
-		structField: structField,
-		rawPath:     rawPath,
-		pathParts:   camelParts,
-		isSource:    isSource,
+		rawPath:   rawPath,
+		pathParts: camelParts,
+		isSource:  isSource,
 	}
 }
 
-// transformFuncName returns the transform function name: first char lowercased.
 func transformFuncName(messageName string) string {
 	if messageName == "" {
 		return ""
@@ -113,40 +79,119 @@ func transformFuncName(messageName string) string {
 	return string(runes)
 }
 
-// buildExtraction builds the Luau expression for reading a source field.
-// 2-segment: input.table and input.table.field or nil
-// 3-segment: input.table and input.table.parent and input.table.parent.valueSubFields and input.table.parent.valueSubFields.child or nil
-func buildExtraction(pathParts []string) string {
-	if len(pathParts) == 2 {
-		table := pathParts[0]
-		field := pathParts[1]
-		return "input." + table + " and input." + table + "." + field + " or nil"
-	}
-	if len(pathParts) == 3 {
-		table := pathParts[0]
-		parent := pathParts[1]
-		child := pathParts[2]
-		prefix := "input." + table
-		return prefix + " and " +
-			prefix + "." + parent + " and " +
-			prefix + "." + parent + ".valueSubFields and " +
-			prefix + "." + parent + ".valueSubFields." + child + " or nil"
-	}
-	var parts []string
-	acc := "input"
-	for _, p := range pathParts {
-		acc += "." + p
-		parts = append(parts, acc)
-	}
-	return strings.Join(parts, " and ") + " or nil"
+// --- Input type tree ---
+// Sources are grouped into a nested tree by namespace.
+// 2-segment: master.field → { master: { field: leaf } }
+// 3-segment: master.compound.sub → { master: { compound: { valueSubFields: { sub: leaf } } } }
+
+type typeNode struct {
+	children map[string]*typeNode // non-nil if branch
+	isLeaf   bool                 // true if this is a terminal field
 }
 
-// buildTargetAccess builds the Luau expression for writing a target field.
+func newBranch() *typeNode {
+	return &typeNode{children: make(map[string]*typeNode)}
+}
+
+func newLeaf() *typeNode {
+	return &typeNode{isLeaf: true}
+}
+
+// buildSourceTree builds a nested tree from source fields.
+func buildSourceTree(sources []mappingField) *typeNode {
+	root := newBranch()
+	for _, s := range sources {
+		parts := s.pathParts // e.g. ["master", "someField"] or ["master", "wireInstructions", "asaBankname"]
+		if len(parts) == 2 {
+			// namespace.field
+			ns := parts[0]
+			field := parts[1]
+			if root.children[ns] == nil {
+				root.children[ns] = newBranch()
+			}
+			root.children[ns].children[field] = newLeaf()
+		} else if len(parts) == 3 {
+			// namespace.compound.subField → namespace.compound.valueSubFields.subField
+			ns := parts[0]
+			compound := parts[1]
+			subField := parts[2]
+			if root.children[ns] == nil {
+				root.children[ns] = newBranch()
+			}
+			nsNode := root.children[ns]
+			if nsNode.children[compound] == nil {
+				nsNode.children[compound] = newBranch()
+			}
+			compNode := nsNode.children[compound]
+			if compNode.children["valueSubFields"] == nil {
+				compNode.children["valueSubFields"] = newBranch()
+			}
+			compNode.children["valueSubFields"].children[subField] = newLeaf()
+		}
+	}
+	return root
+}
+
+// emitTypeTree emits the Luau type definition for a nested tree.
+func emitTypeTree(g *protogen.GeneratedFile, node *typeNode, indent string) {
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(node.children))
+	for k := range node.children {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		child := node.children[k]
+		if child.isLeaf {
+			g.P(indent, k, ": DataTypes.StringType?,")
+		} else {
+			g.P(indent, k, ": {")
+			emitTypeTree(g, child, indent+"\t")
+			g.P(indent, "}?,")
+		}
+	}
+}
+
+// --- Glue extraction ---
+// Builds nested Luau table for the transformInput, extracting from the real source tables.
+
+func emitExtractionTree(g *protogen.GeneratedFile, node *typeNode, accessPrefix string, indent string) {
+	keys := make([]string, 0, len(node.children))
+	for k := range node.children {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		child := node.children[k]
+		if child.isLeaf {
+			g.P(indent, k, " = ", accessPrefix, " and ", accessPrefix, ".", k, " or nil,")
+		} else {
+			// Check if parent exists before building sub-table
+			g.P(indent, k, " = if ", accessPrefix, " and ", accessPrefix, ".", k, " then {")
+			emitExtractionTree(g, child, accessPrefix+"."+k, indent+"\t")
+			g.P(indent, "} else nil,")
+		}
+	}
+}
+
+// --- Target field name (strips "target." prefix) ---
+
+func targetFieldName(pathParts []string) string {
+	// ["target", "sfSomeField"] → "sfSomeField"
+	if len(pathParts) >= 2 {
+		return strings.Join(pathParts[1:], ".")
+	}
+	return strings.Join(pathParts, ".")
+}
+
 func buildTargetAccess(pathParts []string) string {
 	return "output." + strings.Join(pathParts, ".")
 }
 
-// generateMapping is the main entry point for the mapping generator.
+// --- Main generator ---
+
 func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 	protoPath := file.Desc.Path()
 	baseName := strings.TrimSuffix(path.Base(protoPath), ".proto")
@@ -159,7 +204,7 @@ func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 	transformsModule := strings.Replace(baseName, "_mappings", "_transforms", 1)
 	transformsRequire := "@lib/" + transformsModule
 
-	// === Types file (always generated — every rule gets Input + Output types) ===
+	// === Types file ===
 	gt := plugin.NewGeneratedFile(baseName+"_types.luau", "")
 	gt.P("-- GENERATED by protoc-gen-luau \u2014 DO NOT EDIT")
 	gt.P("--!strict")
@@ -169,18 +214,17 @@ func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 	gt.P()
 
 	for _, rule := range rules {
-		// Input type
+		// Input type — nested by namespace
+		tree := buildSourceTree(rule.sources)
 		gt.P("export type ", rule.messageName, "Input = {")
-		for _, s := range rule.sources {
-			gt.P("\t", s.structField, ": DataTypes.StringType?,")
-		}
+		emitTypeTree(gt, tree, "\t")
 		gt.P("}")
 		gt.P()
 
-		// Output type
+		// Output type — flat (target fields)
 		gt.P("export type ", rule.messageName, "Output = {")
 		for _, t := range rule.targets {
-			gt.P("\t", t.structField, ": DataTypes.StringType?,")
+			gt.P("\t", targetFieldName(t.pathParts), ": DataTypes.StringType?,")
 		}
 		gt.P("}")
 		gt.P()
@@ -192,20 +236,18 @@ func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 	g := plugin.NewGeneratedFile(baseName+"_generated.luau", "")
 	g.P("-- GENERATED by protoc-gen-luau \u2014 DO NOT EDIT")
 	g.P("--!strict")
-	g.P(`local DataTypes = require("@lib/data_types")`)
+	g.P(fmt.Sprintf("local DataTypes = require(%q)", getDataTypesRequirePath(file)))
 	g.P(`local SourceTables = require("@lib/source_tables")`)
 	g.P(`local TargetTables = require("@lib/target_tables")`)
-	g.P(`local Transforms = require("`, transformsRequire, `")`)
+	g.P(fmt.Sprintf("local Transforms = require(%q)", transformsRequire))
 	g.P()
 	g.P("local Generated = {}")
 	g.P()
 
-	// === Glue functions ===
 	for _, rule := range rules {
 		emitGlueFunction(g, rule)
 	}
 
-	// === runAll ===
 	g.P("function Generated.runAll(input: SourceTables.SourceTablesType, output: TargetTables.TargetTablesType)")
 	for _, rule := range rules {
 		g.P("\tGenerated.run", rule.messageName, "(input, output)")
@@ -215,28 +257,27 @@ func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 	g.P("return Generated")
 }
 
-// emitGlueFunction emits a single glue function for a mapping rule.
 func emitGlueFunction(g *protogen.GeneratedFile, rule mappingRule) {
 	funcName := transformFuncName(rule.messageName)
+	tree := buildSourceTree(rule.sources)
 
 	g.P("function Generated.run", rule.messageName, "(input: SourceTables.SourceTablesType, output: TargetTables.TargetTablesType)")
 
-	// Build the input struct
+	// Build nested input struct
 	g.P("\tlocal transformInput = {")
-	for _, s := range rule.sources {
-		g.P("\t\t", s.structField, " = ", buildExtraction(s.pathParts), ",")
-	}
+	emitExtractionTree(g, tree, "input", "\t\t")
 	g.P("\t}")
 	g.P()
 
 	// Call transform
 	g.P("\tlocal result = Transforms.", funcName, "(transformInput)")
 
-	// Unpack output struct to target fields
+	// Unpack output
 	for _, t := range rule.targets {
+		tfn := targetFieldName(t.pathParts)
 		targetAccess := buildTargetAccess(t.pathParts)
-		g.P("\tif result.", t.structField, " ~= nil then")
-		g.P("\t\t", targetAccess, " = result.", t.structField)
+		g.P("\tif result.", tfn, " ~= nil then")
+		g.P("\t\t", targetAccess, " = result.", tfn)
 		g.P("\tend")
 	}
 
