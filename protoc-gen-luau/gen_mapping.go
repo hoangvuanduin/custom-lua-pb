@@ -118,15 +118,6 @@ func buildTargetAccess(pathParts []string) string {
 	return "output." + strings.Join(pathParts, ".")
 }
 
-// tracePathStr builds the trace path string (e.g. "master.someField").
-// For 3-segment compound paths, inserts "valueSubFields" between parent and child.
-func tracePathStr(pathParts []string) string {
-	if len(pathParts) == 3 {
-		return pathParts[0] + "." + pathParts[1] + ".valueSubFields." + pathParts[2]
-	}
-	return strings.Join(pathParts, ".")
-}
-
 // generateMapping is the main entry point for the mapping generator.
 func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 	protoPath := file.Desc.Path()
@@ -182,26 +173,6 @@ func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 	g.P(`local Transforms = require("`, transformsRequire, `")`)
 	g.P()
 	g.P("local Generated = {}")
-	g.P()
-
-	// === Static trace metadata ===
-	g.P("-- Static trace metadata")
-	g.P("Generated.mappingTrace = {")
-	for _, rule := range rules {
-		g.P("\t", rule.messageName, " = {")
-		g.P("\t\treads = {")
-		for _, s := range rule.sources {
-			g.P("\t\t\t\"", tracePathStr(s.pathParts), "\",")
-		}
-		g.P("\t\t},")
-		g.P("\t\twrites = {")
-		for _, t := range rule.targets {
-			g.P("\t\t\t\"", tracePathStr(t.pathParts), "\",")
-		}
-		g.P("\t\t},")
-		g.P("\t},")
-	}
-	g.P("}")
 	g.P()
 
 	// === Glue functions ===

@@ -118,18 +118,9 @@ func TestMappingSingleOutput(t *testing.T) {
 		t.Error("missing TargetTables require")
 	}
 
-	// Trace metadata
-	if !strings.Contains(generated, "TextboxOccupation = {") {
-		t.Error("missing TextboxOccupation trace entry")
-	}
-	if !strings.Contains(generated, `"master.asaOccupation"`) {
-		t.Error("missing master.asaOccupation in reads trace")
-	}
-	if !strings.Contains(generated, `"feeder.asaOccupation"`) {
-		t.Error("missing feeder.asaOccupation in reads trace")
-	}
-	if !strings.Contains(generated, `"target.sfOccupation"`) {
-		t.Error("missing target.sfOccupation in writes trace")
+	// No trace metadata
+	if strings.Contains(generated, "mappingTrace") {
+		t.Error("should not contain mappingTrace — tracing comes from proto directly")
 	}
 
 	// Glue function
@@ -261,11 +252,4 @@ func TestMappingCompoundPath(t *testing.T) {
 		t.Errorf("missing feeder compound path extraction.\nwant: %s", expectedFeeder)
 	}
 
-	// Trace metadata should also include valueSubFields
-	if !strings.Contains(generated, `"master.wireInstructions.valueSubFields.asaBankname"`) {
-		t.Error("trace reads should include valueSubFields for compound paths")
-	}
-	if !strings.Contains(generated, `"feeder.wireInstructions.valueSubFields.asaBankname"`) {
-		t.Error("trace reads should include valueSubFields for feeder compound path")
-	}
 }
