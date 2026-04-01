@@ -13,10 +13,10 @@ import (
 
 // mappingField represents a single source or target field in a mapping rule.
 type mappingField struct {
-	fieldName string   // camelCase local variable name (from proto field name)
-	rawPath   string   // original annotation value e.g. "master.some_field"
-	pathParts []string // split by ".", each part converted to camelCase
-	isSource  bool
+	structField string   // field name in the Input/Output struct (derived from actual path)
+	rawPath     string   // original annotation value e.g. "master.some_field"
+	pathParts   []string // split by ".", each part converted to camelCase
+	isSource    bool
 }
 
 // mappingRule represents one proto message that defines a mapping rule.
@@ -40,12 +40,12 @@ func parseMappingRules(file *protogen.File) []mappingRule {
 			}
 			if proto.HasExtension(opts, mappingoptions.E_Source) {
 				rawPath := proto.GetExtension(opts, mappingoptions.E_Source).(string)
-				mf := parseMappingField(field, rawPath, true)
+				mf := parseMappingField(rawPath, true)
 				rule.sources = append(rule.sources, mf)
 			}
 			if proto.HasExtension(opts, mappingoptions.E_Target) {
 				rawPath := proto.GetExtension(opts, mappingoptions.E_Target).(string)
-				mf := parseMappingField(field, rawPath, false)
+				mf := parseMappingField(rawPath, false)
 				rule.targets = append(rule.targets, mf)
 			}
 		}
@@ -56,18 +56,50 @@ func parseMappingRules(file *protogen.File) []mappingRule {
 	return rules
 }
 
-// parseMappingField converts a proto field + raw annotation path into a mappingField.
-func parseMappingField(field *protogen.Field, rawPath string, isSource bool) mappingField {
+// parseMappingField converts a raw annotation path into a mappingField.
+// For sources: "master.some_field" → structField "masterSomeField"
+// For sources (compound): "master.wire_instructions.bank_name" → structField "masterWireInstructionsBankName"
+// For targets: "target.sf_some_field" → structField "sfSomeField" (strips "target." prefix)
+func parseMappingField(rawPath string, isSource bool) mappingField {
 	parts := strings.Split(rawPath, ".")
 	camelParts := make([]string, len(parts))
 	for i, p := range parts {
 		camelParts[i] = snakeToCamel(p)
 	}
+
+	var structField string
+	if isSource {
+		// Join all camelCase parts: "master" + "SomeField" → "masterSomeField"
+		structField = camelParts[0]
+		for _, p := range camelParts[1:] {
+			// Capitalize first char of each subsequent part
+			runes := []rune(p)
+			if len(runes) > 0 {
+				runes[0] = unicode.ToUpper(runes[0])
+			}
+			structField += string(runes)
+		}
+	} else {
+		// For targets, strip "target." prefix — use the field name directly
+		if len(camelParts) >= 2 {
+			structField = camelParts[1]
+			for _, p := range camelParts[2:] {
+				runes := []rune(p)
+				if len(runes) > 0 {
+					runes[0] = unicode.ToUpper(runes[0])
+				}
+				structField += string(runes)
+			}
+		} else {
+			structField = strings.Join(camelParts, "")
+		}
+	}
+
 	return mappingField{
-		fieldName: snakeToCamel(string(field.Desc.Name())),
-		rawPath:   rawPath,
-		pathParts: camelParts,
-		isSource:  isSource,
+		structField: structField,
+		rawPath:     rawPath,
+		pathParts:   camelParts,
+		isSource:    isSource,
 	}
 }
 
@@ -86,13 +118,11 @@ func transformFuncName(messageName string) string {
 // 3-segment: input.table and input.table.parent and input.table.parent.valueSubFields and input.table.parent.valueSubFields.child or nil
 func buildExtraction(pathParts []string) string {
 	if len(pathParts) == 2 {
-		// table.field
 		table := pathParts[0]
 		field := pathParts[1]
 		return "input." + table + " and input." + table + "." + field + " or nil"
 	}
 	if len(pathParts) == 3 {
-		// table.parent.child  →  input.table.parent.valueSubFields.child
 		table := pathParts[0]
 		parent := pathParts[1]
 		child := pathParts[2]
@@ -102,7 +132,6 @@ func buildExtraction(pathParts []string) string {
 			prefix + "." + parent + ".valueSubFields and " +
 			prefix + "." + parent + ".valueSubFields." + child + " or nil"
 	}
-	// fallback: just chain them all
 	var parts []string
 	acc := "input"
 	for _, p := range pathParts {
@@ -113,7 +142,6 @@ func buildExtraction(pathParts []string) string {
 }
 
 // buildTargetAccess builds the Luau expression for writing a target field.
-// e.g. ["target", "sfSomeField"] → "output.target.sfSomeField"
 func buildTargetAccess(pathParts []string) string {
 	return "output." + strings.Join(pathParts, ".")
 }
@@ -128,40 +156,37 @@ func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 		return
 	}
 
-	// Derive the transforms require path from the base name
 	transformsModule := strings.Replace(baseName, "_mappings", "_transforms", 1)
 	transformsRequire := "@lib/" + transformsModule
 
-	// Determine which rules are multi-output (for types file)
-	var multiOutputRules []mappingRule
+	// === Types file (always generated — every rule gets Input + Output types) ===
+	gt := plugin.NewGeneratedFile(baseName+"_types.luau", "")
+	gt.P("-- GENERATED by protoc-gen-luau \u2014 DO NOT EDIT")
+	gt.P("--!strict")
+	gt.P(`local DataTypes = require("@lib/data_types")`)
+	gt.P()
+	gt.P("local Types = {}")
+	gt.P()
+
 	for _, rule := range rules {
-		if len(rule.targets) > 1 {
-			multiOutputRules = append(multiOutputRules, rule)
+		// Input type
+		gt.P("export type ", rule.messageName, "Input = {")
+		for _, s := range rule.sources {
+			gt.P("\t", s.structField, ": DataTypes.StringType?,")
 		}
-	}
-
-	// === Types file (only if there are multi-output rules) ===
-	if len(multiOutputRules) > 0 {
-		gt := plugin.NewGeneratedFile(baseName+"_types.luau", "")
-		gt.P("-- GENERATED by protoc-gen-luau \u2014 DO NOT EDIT")
-		gt.P("--!strict")
-		gt.P(`local DataTypes = require("@lib/data_types")`)
-		gt.P()
-		gt.P("local Types = {}")
+		gt.P("}")
 		gt.P()
 
-		for _, rule := range multiOutputRules {
-			typeName := rule.messageName + "Output"
-			gt.P("export type ", typeName, " = {")
-			for _, t := range rule.targets {
-				gt.P("\t", t.fieldName, ": DataTypes.StringType?,")
-			}
-			gt.P("}")
-			gt.P()
+		// Output type
+		gt.P("export type ", rule.messageName, "Output = {")
+		for _, t := range rule.targets {
+			gt.P("\t", t.structField, ": DataTypes.StringType?,")
 		}
-
-		gt.P("return Types")
+		gt.P("}")
+		gt.P()
 	}
+
+	gt.P("return Types")
 
 	// === Generated file ===
 	g := plugin.NewGeneratedFile(baseName+"_generated.luau", "")
@@ -192,41 +217,26 @@ func generateMapping(plugin *protogen.Plugin, file *protogen.File) {
 
 // emitGlueFunction emits a single glue function for a mapping rule.
 func emitGlueFunction(g *protogen.GeneratedFile, rule mappingRule) {
-	isMulti := len(rule.targets) > 1
-	if isMulti {
-		g.P("-- Multi output glue")
-	} else {
-		g.P("-- Single output glue")
-	}
-	g.P("function Generated.run", rule.messageName, "(input: SourceTables.SourceTablesType, output: TargetTables.TargetTablesType)")
-
-	// Local variables for source extractions
-	for _, s := range rule.sources {
-		g.P("\tlocal ", s.fieldName, " = ", buildExtraction(s.pathParts))
-	}
-	g.P()
-
-	// Build param list for transform call
-	var paramNames []string
-	for _, s := range rule.sources {
-		paramNames = append(paramNames, s.fieldName)
-	}
 	funcName := transformFuncName(rule.messageName)
 
-	if isMulti {
-		// Multi-output: call returns a result struct
-		g.P("\tlocal result = Transforms.", funcName, "(", strings.Join(paramNames, ", "), ")")
-		for _, t := range rule.targets {
-			targetAccess := buildTargetAccess(t.pathParts)
-			g.P("\tif result.", t.fieldName, " ~= nil then ", targetAccess, " = result.", t.fieldName, " end")
-		}
-	} else if len(rule.targets) == 1 {
-		// Single-output: call returns a value directly
-		t := rule.targets[0]
+	g.P("function Generated.run", rule.messageName, "(input: SourceTables.SourceTablesType, output: TargetTables.TargetTablesType)")
+
+	// Build the input struct
+	g.P("\tlocal transformInput = {")
+	for _, s := range rule.sources {
+		g.P("\t\t", s.structField, " = ", buildExtraction(s.pathParts), ",")
+	}
+	g.P("\t}")
+	g.P()
+
+	// Call transform
+	g.P("\tlocal result = Transforms.", funcName, "(transformInput)")
+
+	// Unpack output struct to target fields
+	for _, t := range rule.targets {
 		targetAccess := buildTargetAccess(t.pathParts)
-		g.P("\tlocal ", t.fieldName, " = Transforms.", funcName, "(", strings.Join(paramNames, ", "), ")")
-		g.P("\tif ", t.fieldName, " ~= nil then")
-		g.P("\t\t", targetAccess, " = ", t.fieldName)
+		g.P("\tif result.", t.structField, " ~= nil then")
+		g.P("\t\t", targetAccess, " = result.", t.structField)
 		g.P("\tend")
 	}
 
